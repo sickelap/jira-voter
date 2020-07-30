@@ -9,6 +9,7 @@ from flask_jwt_extended import (
     JWTManager, jwt_required, jwt_refresh_token_required,
     create_access_token, create_refresh_token, get_jwt_identity
 )
+from redis import Redis
 
 app = FlaskAPI(__name__)
 
@@ -97,7 +98,7 @@ def regresh():
     }, status.HTTP_200_OK
 
 
-@app.route(f'{api_prefix}/<path:path>', methods=['GET','PUT','POST'])
+@app.route(f'{api_prefix}/<path:path>', methods=['GET','POST'])
 @jwt_required
 def jira_api_get(path):
     url = f'{jira_url}/rest/agile/1.0/{path}'
@@ -111,4 +112,4 @@ def jira_api_get(path):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=80)
+    app.run(host='0.0.0.0', port=5000)
