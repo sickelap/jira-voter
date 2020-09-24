@@ -95,7 +95,7 @@ def format_display_name(name):
     return " ".join([name.title() for name in names])
 
 
-@app.route('${api_prefix}auth/login', methods=['POST'])
+@app.route('${api_prefix}/auth/login', methods=['POST'])
 @validate_json_payload(required=['username', 'password'])
 def login():
     credentials = request.get_json()
