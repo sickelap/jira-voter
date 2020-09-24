@@ -1,6 +1,7 @@
 import os
 import requests
 import json
+import uuid
 from base64 import b64encode
 from cryptography.fernet import Fernet
 from flask import request, url_for
@@ -18,6 +19,10 @@ app.config['JIRA_TIMEOUT'] = os.getenv('JIRA_TIMEOUT', 5)
 app.config['CRYPTO_SECRET_KEY'] = b'SqGSpFVxQyzQAizbGasl1sxhsKPr3r-LRDtQrULhuQo=' # Fernet.generate_key()
 app.config['JWT_SECRET_KEY'] = b'\xc5\xb1\xe6`N\xd2\xfe\xb7\xef\xa2O\xc7~\xf3\xb3\x1b\x13PC\xbe\xefm\xc4\xe0\xf5\x8e\n\xaa\xbf\xbc\xc7\xb9' # os.urandom(32)
 app.config['API_PREFIX'] = '/api/v1'
+app.config['REDIS_HOST'] = os.getenv('REDIS_HOST', 'localhost')
+app.config['REDIS_PORT'] = os.getenv('REDIS_PORT', 6379)
+
+redis = Redis(host=app.config['REDIS_HOST'], port=app.config['REDIS_PORT'])
 
 jwt = JWTManager(app)
 
@@ -27,7 +32,7 @@ jira_url = app.config['JIRA_URL']
 api_prefix = app.config['API_PREFIX']
 
 
-def validate_json(*args_d, **kw_d):
+def validate_json_payload(*args_d, **kw_d):
     def wrap(f):
         def wrapper(*args, **kw):
             try:
@@ -39,7 +44,7 @@ def validate_json(*args_d, **kw_d):
 
             if 'required' in kw_d:
                 for p in kw_d['required']:
-                    if not p in data:
+                    if p not in data:
                         return {
                             'msg': 'missing property: {}'.format(p)
                         }, status.HTTP_400_BAD_REQUEST
@@ -58,13 +63,13 @@ def check_credentials(credentials):
 
 
 def encrypt(credentials):
-    fernet = Fernet(app.config.get('CRYPTO_SECRET_KEY'))
-    return fernet.encrypt(json.dumps(credentials).encode()).decode()
+    crypto = Fernet(app.config.get('CRYPTO_SECRET_KEY'))
+    return crypto.encrypt(json.dumps(credentials).encode()).decode()
 
 
 def decrypt(payload):
-    fernet = Fernet(app.config.get('CRYPTO_SECRET_KEY'))
-    return json.loads(fernet.decrypt(payload.encode()).decode())
+    crypto = Fernet(app.config.get('CRYPTO_SECRET_KEY'))
+    return json.loads(crypto.decrypt(payload).decode())
 
 
 def get_jira_request_headers(credentials):
@@ -72,8 +77,18 @@ def get_jira_request_headers(credentials):
     return {'Content-Type': 'application/json', 'Authorization': f'Basic {auth}'}
 
 
+def session_set(data):
+    session_id = str(uuid.uuid4())
+    redis.set(session_id, data)
+    return session_id
+
+
+def session_get(session_id):
+    return redis.get(session_id)
+
+
 @app.route('/api/v1/auth/login', methods=['POST'])
-@validate_json(required=['username', 'password'])
+@validate_json_payload(required=['username', 'password'])
 def login():
     credentials = request.get_json()
 
@@ -82,34 +97,40 @@ def login():
             'msg': 'bad credentials'
         }, status.HTTP_401_UNAUTHORIZED
 
-    encrypted_credentials = encrypt(credentials)
+    session_id = session_set(encrypt(credentials))
 
     return {
-        'access_token': create_access_token(identity=encrypted_credentials),
-        'refresh_token': create_refresh_token(identity=encrypted_credentials)
+        'access_token': create_access_token(identity=session_id),
+        'refresh_token': create_refresh_token(identity=session_id)
+    }, status.HTTP_200_OK
+
+
+@app.route('/api/v1/auth/logout', methods=['POST'])
+@jwt_required
+def logout():
+    redis.delete(get_jwt_identity())
+    return {
+      'msg': 'logged out'
     }, status.HTTP_200_OK
 
 
 @app.route('/api/v1/auth/refresh', methods=['POST'])
 @jwt_refresh_token_required
-def regresh():
+def refresh():
     return {
         'access_token': create_access_token(identity=get_jwt_identity())
     }, status.HTTP_200_OK
 
 
-@app.route(f'{api_prefix}/<path:path>', methods=['GET','POST'])
+@app.route(f'{api_prefix}/<path:path>', methods=['GET', 'POST'])
 @jwt_required
 def jira_api_get(path):
     url = f'{jira_url}/rest/agile/1.0/{path}'
-    headers = get_jira_request_headers(decrypt(get_jwt_identity()))
+    session_data = session_get(get_jwt_identity())
+    headers = get_jira_request_headers(decrypt(session_data))
     try:
         return requests.get(url, params=request.args, headers=headers).json()
     except Exception as e:
         return {
             'msg': f'upstream error - {e}'
         }, status.HTTP_503_SERVICE_UNAVAILABLE
-
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
