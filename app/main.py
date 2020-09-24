@@ -16,11 +16,11 @@ app = FlaskAPI(__name__)
 
 app.config['JIRA_URL'] = os.getenv('JIRA_URL', 'http://localhost:8080')
 app.config['JIRA_TIMEOUT'] = os.getenv('JIRA_TIMEOUT', 5)
-app.config['CRYPTO_SECRET_KEY'] = b'SqGSpFVxQyzQAizbGasl1sxhsKPr3r-LRDtQrULhuQo=' # Fernet.generate_key()
-app.config['JWT_SECRET_KEY'] = b'\xc5\xb1\xe6`N\xd2\xfe\xb7\xef\xa2O\xc7~\xf3\xb3\x1b\x13PC\xbe\xefm\xc4\xe0\xf5\x8e\n\xaa\xbf\xbc\xc7\xb9' # os.urandom(32)
 app.config['API_PREFIX'] = '/api/v1'
 app.config['REDIS_HOST'] = os.getenv('REDIS_HOST', 'localhost')
 app.config['REDIS_PORT'] = os.getenv('REDIS_PORT', 6379)
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY').encode()
+app.config['CRYPTO_SECRET_KEY'] = os.getenv('CRYPTO_SECRET_KEY').encode() or Fernet.generate_key()
 
 redis = Redis(host=app.config['REDIS_HOST'], port=app.config['REDIS_PORT'])
 
