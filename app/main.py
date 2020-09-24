@@ -95,7 +95,7 @@ def format_display_name(name):
     return " ".join([name.title() for name in names])
 
 
-@app.route('/api/v1/auth/login', methods=['POST'])
+@app.route('${api_prefix}auth/login', methods=['POST'])
 @validate_json_payload(required=['username', 'password'])
 def login():
     credentials = request.get_json()
@@ -116,7 +116,7 @@ def login():
     }, status.HTTP_200_OK
 
 
-@app.route('/api/v1/auth/logout', methods=['POST'])
+@app.route('${api_prefix}/auth/logout', methods=['POST'])
 @jwt_required
 def logout():
     redis.delete(get_jwt_identity())
@@ -125,7 +125,7 @@ def logout():
     }, status.HTTP_200_OK
 
 
-@app.route('/api/v1/auth/refresh', methods=['POST'])
+@app.route('${api_prefix}/auth/refresh', methods=['POST'])
 @jwt_refresh_token_required
 def refresh():
     return {
