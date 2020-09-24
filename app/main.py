@@ -6,6 +6,7 @@ from base64 import b64encode
 from cryptography.fernet import Fernet
 from flask import request, url_for
 from flask_api import FlaskAPI, status, exceptions
+from flask_cors import CORS
 from flask_jwt_extended import (
     JWTManager, jwt_required, jwt_refresh_token_required,
     create_access_token, create_refresh_token, get_jwt_identity
@@ -13,6 +14,8 @@ from flask_jwt_extended import (
 from redis import Redis
 
 app = FlaskAPI(__name__)
+
+cors = CORS(app, resources={r"/*": {"origins": "*"}})
 
 app.config['JIRA_URL'] = os.getenv('JIRA_URL', 'http://localhost:8080')
 app.config['JIRA_TIMEOUT'] = os.getenv('JIRA_TIMEOUT', 5)
