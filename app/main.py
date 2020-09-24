@@ -90,6 +90,11 @@ def session_get(session_id):
     return redis.get(session_id)
 
 
+def format_display_name(name):
+    names = name.split("@")[0].split(".")
+    return " ".join([name.title() for name in names])
+
+
 @app.route('/api/v1/auth/login', methods=['POST'])
 @validate_json_payload(required=['username', 'password'])
 def login():
@@ -101,9 +106,12 @@ def login():
         }, status.HTTP_401_UNAUTHORIZED
 
     session_id = session_set(encrypt(credentials))
+    user_claims = {
+        'display_name': format_display_name(credentials['username'])
+    }
 
     return {
-        'access_token': create_access_token(identity=session_id),
+        'access_token': create_access_token(identity=session_id, user_claims=user_claims),
         'refresh_token': create_refresh_token(identity=session_id)
     }, status.HTTP_200_OK
 
