@@ -1,0 +1,119 @@
+openapi: 3.0.0
+info:
+  title: Jira voter API
+  description: Jira voter API
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000
+    description: local development server
+security:
+  - access_token: []
+  - refresh_token: []
+paths:
+  /auth/login:
+    post:
+      security: []
+      responses:
+        200:
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+        401:
+          description: Invalid credentials
+          content:
+            application/json:
+              example:
+                msg: "bad credentials"
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRequest'
+  /auth/logout:
+    post:
+      security:
+        - access_token: []
+      responses:
+        200:
+          description: Logged out
+          content:
+            application/json:
+              example:
+                msg: logged out
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+  /auth/refresh:
+    post:
+      security:
+        - refresh_token: []
+      responses:
+        200:
+          description: Token successfully refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+  /<path>:
+    get:
+      security:
+        - access_token: []
+      description:
+        Request to Jira API server by path /rest/agile/1.0/<path>
+      responses:
+        200:
+          description: successful response
+        400:
+          description: invalid request
+        403:
+          description: unauthorized
+    post:
+      security:
+        - access_token: []
+      description:
+        Request to Jira API server by path /rest/agile/1.0/<path> and any payload that path supports
+      responses:
+        200:
+          description: successful response
+        400:
+          description: invalid request
+        403:
+          description: unauthorized
+
+components:
+  schemas:
+    AuthRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+    AuthSuccessResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+    ResponseMessage:
+      type: object
+      properties:
+        msg:
+          type: string
+  securitySchemes:
+    access_token:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    refresh_token:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

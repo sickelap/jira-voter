@@ -4,18 +4,17 @@ import json
 import uuid
 from base64 import b64encode
 from cryptography.fernet import Fernet
-from flask import request, url_for
-from flask_api import FlaskAPI, status, exceptions
+from flask import request
+from flask_api import FlaskAPI, status
 from flask_cors import CORS
 from flask_jwt_extended import (
     JWTManager, jwt_required, jwt_refresh_token_required,
     create_access_token, create_refresh_token, get_jwt_identity
 )
+from flask_socketio import SocketIO, send, emit, join_room, leave_room
 from redis import Redis
 
 app = FlaskAPI(__name__)
-
-cors = CORS(app, resources={r"/*": {"origins": "*"}})
 
 app.config['JIRA_URL'] = os.getenv('JIRA_URL', 'http://localhost:8080')
 app.config['JIRA_TIMEOUT'] = os.getenv('JIRA_TIMEOUT', 5)
@@ -24,11 +23,14 @@ app.config['REDIS_HOST'] = os.getenv('REDIS_HOST', 'localhost')
 app.config['REDIS_PORT'] = os.getenv('REDIS_PORT', 6379)
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY').encode()
 app.config['CRYPTO_SECRET_KEY'] = os.getenv('CRYPTO_SECRET_KEY').encode() or Fernet.generate_key()
+app.config['CORS_ORIGINS'] = os.getenv('CORS_ORIGINS')
+app.config['CORS_ORIGINS_WEBSOCKET'] = os.getenv('CORS_ORIGINS_WEBSOCKET')
+
+CORS(app, resources={r"/*": {"origins": app.config['CORS_ORIGINS']}})
+socketio = SocketIO(app, cors_allowed_origins=app.config['CORS_ORIGINS_WEBSOCKET'])
 
 redis = Redis(host=app.config['REDIS_HOST'], port=app.config['REDIS_PORT'])
-
 jwt = JWTManager(app)
-
 
 # convenience vars for f'' templating
 jira_url = app.config['JIRA_URL']
@@ -129,13 +131,14 @@ def logout():
 @jwt_refresh_token_required
 def refresh():
     return {
-        'access_token': create_access_token(identity=get_jwt_identity())
+        'access_token': create_access_token(identity=get_jwt_identity()),
+        'refresh_token': create_refresh_token(identity=get_jwt_identity())
     }, status.HTTP_200_OK
 
 
 @app.route(f'{api_prefix}/<path:path>', methods=['GET', 'POST'])
 @jwt_required
-def jira_api_get(path):
+def jira_api(path):
     url = f'{jira_url}/rest/agile/1.0/{path}'
     session_data = session_get(get_jwt_identity())
     headers = get_jira_request_headers(decrypt(session_data))
@@ -145,3 +148,23 @@ def jira_api_get(path):
         return {
             'msg': f'upstream error - {e}'
         }, status.HTTP_503_SERVICE_UNAVAILABLE
+
+
+@socketio.on('join')
+def on_join(data):
+    user = data['user']
+    room = data['room']
+    join_room(room)
+    send(user + ' has entered the room.', room=room)
+
+
+@socketio.on('leave')
+def on_leave(data):
+    user = data['user']
+    room = data['room']
+    leave_room(room)
+    send(user + ' has left the room.', room=room)
+
+
+if __name__ == "__main__":
+    socketio.run(app)
