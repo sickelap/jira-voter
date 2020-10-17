@@ -1,0 +1,18 @@
+# vim: ts=2 expandtab
+version: "3.0"
+services:
+  jira:
+    image: atlassian/jira-software
+    ports:
+      - 2080:8080
+    volumes:
+      - jiraVolume:/var/atlassian/application-data/jira
+  redis:
+    image: redislabs/rejson
+    ports:
+      - 6379:6379
+    volumes:
+      - redisVolume:/data
+volumes:
+  jiraVolume: {}
+  redisVolume: {}

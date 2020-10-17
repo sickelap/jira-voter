@@ -9,6 +9,7 @@ export JWT_SECRET_KEY=1sWCYYQHnt5RV6e5jI4ptVewxhCypxST
 export CORS_ORIGINS="*"
 export CORS_ORIGINS_WEBSOCKET="*"
 
+export JIRA_URL=http://localhost:2080
 export FLASK_DEBUG=1
 
 flask run
