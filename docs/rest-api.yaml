@@ -4,8 +4,13 @@ info:
   description: Jira voter API
   version: 1.0.0
 servers:
-  - url: http://localhost:5000
+  - url: http://localhost:5000/api/{api}
     description: local development server
+    variables:
+      api:
+        default: v1
+        enum:
+          - v1
 security:
   - access_token: []
   - refresh_token: []
