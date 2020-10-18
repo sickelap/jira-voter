@@ -93,8 +93,7 @@ def session_get(session_id):
 
 
 def format_display_name(name):
-    names = name.split("@")[0].split(".")
-    return " ".join([name.title() for name in names])
+    return " ".join([n.title() for n in name.split('@')[0].split('.')])
 
 
 @app.route(f'{api_prefix}/auth/login', methods=['POST'])
