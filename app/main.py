@@ -135,10 +135,10 @@ def refresh():
     }, status.HTTP_200_OK
 
 
-@app.route(f'{api_prefix}/<path:path>', methods=['GET', 'POST'])
+@app.route(f'/jira/<path:path>', methods=['GET', 'POST'])
 @jwt_required
 def jira_api(path):
-    url = f'{jira_url}/rest/agile/1.0/{path}'
+    url = f'{jira_url}/{path}'
     session_data = session_get(get_jwt_identity())
     headers = get_jira_request_headers(decrypt(session_data))
     try:
