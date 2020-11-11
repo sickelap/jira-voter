@@ -135,7 +135,7 @@ def refresh():
     }, status.HTTP_200_OK
 
 
-@app.route(f'/jira/<path:path>', methods=['GET', 'POST'])
+@app.route(f'/jira/<path:path>', methods=['GET', 'POST', 'PUT'])
 @jwt_required
 def jira_api(path):
     url = f'{jira_url}/{path}'
