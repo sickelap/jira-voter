@@ -11,7 +11,7 @@ from flask_jwt_extended import (
     JWTManager, jwt_required, jwt_refresh_token_required,
     create_access_token, create_refresh_token, get_jwt_identity
 )
-from flask_socketio import SocketIO, send, emit, join_room, leave_room
+from flask_socketio import SocketIO, send, join_room, leave_room
 from redis import Redis
 
 app = FlaskAPI(__name__)
@@ -40,7 +40,7 @@ api_prefix = app.config['API_PREFIX']
 def is_json(data):
     try:
         json.loads(data)
-    except ValueError as e:
+    except ValueError:
         return False
     return True
 
@@ -51,7 +51,7 @@ def parse_response(response):
     return response.json(), response.status_code
 
 
-def validate_json_payload(*args_d, **kw_d):
+def validate_json_payload(**kw_d):
     def wrap(f):
         def wrapper(*args, **kw):
             try:
@@ -77,7 +77,7 @@ def check_credentials(credentials):
         url = f'{jira_url}/rest/agile/1.0/board?maxResults=1'
         headers = get_jira_request_headers(credentials)
         return requests.get(url, headers=headers, timeout=app.config['JIRA_TIMEOUT']).ok
-    except Exception as e:
+    except requests.exceptions.RequestException:
         return False
 
 
@@ -94,6 +94,19 @@ def decrypt(payload):
 def get_jira_request_headers(credentials):
     auth = b64encode('{username}:{password}'.format(**credentials).encode()).decode()
     return {'Content-Type': 'application/json', 'Authorization': f'Basic {auth}'}
+
+
+def get_jira_request_params(req: request):
+    session_data = session_get(get_jwt_identity())
+    headers = get_jira_request_headers(decrypt(session_data))
+    kw = {'headers': headers}
+    if req.args:
+        kw['params'] = req.args
+    if req.data and is_json(req.data):
+        kw['json'] = req.data
+    if req.data and not is_json(req.data):
+        kw['data'] = req.data
+    return kw
 
 
 def session_set(data):
@@ -114,17 +127,10 @@ def format_display_name(name):
 @validate_json_payload(required=['username', 'password'])
 def login():
     credentials = request.get_json()
-
     if not check_credentials(credentials):
-        return {
-            'msg': 'bad credentials'
-        }, status.HTTP_401_UNAUTHORIZED
-
+        return {'msg': 'bad credentials'}, status.HTTP_401_UNAUTHORIZED
     session_id = session_set(encrypt(credentials))
-    user_claims = {
-        'display_name': format_display_name(credentials['username'])
-    }
-
+    user_claims = {'display_name': format_display_name(credentials['username'])}
     return {
         'access_token': create_access_token(identity=session_id, user_claims=user_claims),
         'refresh_token': create_refresh_token(identity=session_id)
@@ -135,17 +141,18 @@ def login():
 @jwt_required
 def logout():
     redis.delete(get_jwt_identity())
-    return {
-      'msg': 'logged out'
-    }, status.HTTP_200_OK
+    return {'msg': 'logged out'}, status.HTTP_200_OK
 
 
 @app.route(f'{api_prefix}/auth/refresh', methods=['POST'])
 @jwt_refresh_token_required
 def refresh():
+    session_id = get_jwt_identity()
+    session = decrypt(session_get(session_id))
+    user_claims = {'display_name': format_display_name(session['username'])}
     return {
-        'access_token': create_access_token(identity=get_jwt_identity()),
-        'refresh_token': create_refresh_token(identity=get_jwt_identity())
+        'access_token': create_access_token(identity=session_id, user_claims=user_claims),
+        'refresh_token': create_refresh_token(identity=session_id)
     }, status.HTTP_200_OK
 
 
@@ -153,24 +160,14 @@ def refresh():
 @jwt_required
 def jira_api(path):
     url = f'{jira_url}/{path}'
-    session_data = session_get(get_jwt_identity())
-    headers = get_jira_request_headers(decrypt(session_data))
-    kw = {'headers': headers}
-    if request.args:
-        kw['params'] = request.args
-    if request.data and is_json(request.data):
-        kw['json'] = request.data
-    if request.data and not is_json(request.data):
-        kw['data'] = request.data
+    params = get_jira_request_params(request)
     try:
         if request.method == 'GET':
-            return parse_response(requests.get(url, **kw))
+            return parse_response(requests.get(url, **params))
         if request.method == 'POST':
-            return parse_response(requests.post(url, **kw))
+            return parse_response(requests.post(url, **params))
     except Exception as e:
-        return {
-            'msg': f'upstream error - {e}'
-        }, status.HTTP_503_SERVICE_UNAVAILABLE
+        return {'msg': f'upstream error - {e}'}, status.HTTP_503_SERVICE_UNAVAILABLE
 
 
 @socketio.on('join')
