@@ -37,6 +37,20 @@ jira_url = app.config['JIRA_URL']
 api_prefix = app.config['API_PREFIX']
 
 
+def is_json(data):
+    try:
+        json.loads(data)
+    except ValueError as e:
+        return False
+    return True
+
+
+def parse_response(response):
+    if is_json(response.content):
+        return response.content, response.status_code
+    return response.json(), response.status_code
+
+
 def validate_json_payload(*args_d, **kw_d):
     def wrap(f):
         def wrapper(*args, **kw):
@@ -63,7 +77,7 @@ def check_credentials(credentials):
         url = f'{jira_url}/rest/agile/1.0/board?maxResults=1'
         headers = get_jira_request_headers(credentials)
         return requests.get(url, headers=headers, timeout=app.config['JIRA_TIMEOUT']).ok
-    except Exception:
+    except Exception as e:
         return False
 
 
@@ -135,14 +149,24 @@ def refresh():
     }, status.HTTP_200_OK
 
 
-@app.route(f'/jira/<path:path>', methods=['GET', 'POST', 'PUT'])
+@app.route(f'/jira/<path:path>', methods=['GET', 'POST'])
 @jwt_required
 def jira_api(path):
     url = f'{jira_url}/{path}'
     session_data = session_get(get_jwt_identity())
     headers = get_jira_request_headers(decrypt(session_data))
+    kw = {'headers': headers}
+    if request.args:
+        kw['params'] = request.args
+    if request.data and is_json(request.data):
+        kw['json'] = request.data
+    if request.data and not is_json(request.data):
+        kw['data'] = request.data
     try:
-        return requests.get(url, params=request.args, headers=headers).json()
+        if request.method == 'GET':
+            return parse_response(requests.get(url, **kw))
+        if request.method == 'POST':
+            return parse_response(requests.post(url, **kw))
     except Exception as e:
         return {
             'msg': f'upstream error - {e}'
