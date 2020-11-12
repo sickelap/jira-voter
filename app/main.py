@@ -37,18 +37,11 @@ jira_url = app.config['JIRA_URL']
 api_prefix = app.config['API_PREFIX']
 
 
-def is_json(data):
-    try:
-        json.loads(data)
-    except ValueError:
-        return False
-    return True
-
-
-def parse_response(response):
-    if is_json(response.content):
-        return response.content, response.status_code
-    return response.json(), response.status_code
+def http_request(method, url, params):
+    if method == 'GET':
+        return requests.get(url, **params)
+    if method == 'POST':
+        return requests.post(url, **params)
 
 
 def validate_json_payload(**kw_d):
@@ -75,8 +68,11 @@ def validate_json_payload(**kw_d):
 def check_credentials(credentials):
     try:
         url = f'{jira_url}/rest/agile/1.0/board?maxResults=1'
-        headers = get_jira_request_headers(credentials)
-        return requests.get(url, headers=headers, timeout=app.config['JIRA_TIMEOUT']).ok
+        params = {
+            'headers': get_jira_request_headers(credentials),
+            'timeout': app.config['JIRA_TIMEOUT']
+        }
+        return http_request('GET', url, params).ok
     except requests.exceptions.RequestException:
         return False
 
@@ -102,10 +98,9 @@ def get_jira_request_params(req: request):
     kw = {'headers': headers}
     if req.args:
         kw['params'] = req.args
-    if req.data and is_json(req.data):
-        kw['json'] = req.data
-    if req.data and not is_json(req.data):
-        kw['data'] = req.data
+    if req.method == 'POST':
+        prop = 'data' if isinstance(req.data, str) else 'json'
+        kw[prop] = req.data
     return kw
 
 
@@ -162,10 +157,8 @@ def jira_api(path):
     url = f'{jira_url}/{path}'
     params = get_jira_request_params(request)
     try:
-        if request.method == 'GET':
-            return parse_response(requests.get(url, **params))
-        if request.method == 'POST':
-            return parse_response(requests.post(url, **params))
+        resp = http_request(request.method, url, params)
+        return resp.content, resp.status_code
     except Exception as e:
         return {'msg': f'upstream error - {e}'}, status.HTTP_503_SERVICE_UNAVAILABLE
 
