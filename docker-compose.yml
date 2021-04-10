@@ -3,11 +3,13 @@ version: "3.0"
 services:
   jira:
     image: atlassian/jira-software
+    container_name: voter-jira
     ports:
       - 2080:8080
     volumes:
       - jiraVolume:/var/atlassian/application-data/jira
   redis:
+    container_name: voter-redis
     image: redislabs/rejson
     ports:
       - 6379:6379
